@@ -1,0 +1,1164 @@
+---
+title: "Descriptive Statistics"
+author: "Teresa Graffi"
+date: "23/8/2021"
+output: pdf_document
+vignette: >
+  %\VignetteIndexEntry{Authentication with rtweet}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}  
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, collapse = TRUE,
+                      comment = " >" ,fig.height=7.5, fig.width=10)
+```
+
+### Dataset
+Creating an object containing last 2000 tweets from the timelines of each of the three selected accounts (Giorgia Meloni, Carlo Calenda, Matteo Renzi):
+
+```{r, echo=FALSE, include=FALSE}
+setwd("C:/Users/user/Desktop/TESI")
+#install.packages("rtweet")
+library(ROAuth)
+library(rtweet)
+library(ggplot2)
+library(streamR)
+library(dplyr)
+library(RColorBrewer)
+library(devtools)
+library(ngram)
+library(tm)
+library(wordcloud)
+library(Rcpp)
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+#appname <- "Sentiment_Analysis_TG"
+
+key <- "kT0x3I7KDlxpi4WnyWRw5cT5Y"
+secret <- "fe8JEKuKlrUtAJrKV4LVx2C3qZN0xhwfPaIuWNtE8M5AEkiJ47"
+
+access_tk <- "1241489663644372994-3YXOexXau6NMj0khCPI3qDxCFty9mC"
+access_sc <- "dTtL8prnqWCon7SZzF3aZvzJgmpCwUr1KF1fc1AdZsj9C"
+
+rtweet_bot <- function(
+      api_key = key,
+      api_secret = secret, 
+      access_token = access_tk, 
+      access_secret = access_sc
+  ) {
+
+  app <- httr::oauth_app("rtweet", key = api_key, secret = api_secret)
+  credentials <- list(
+    oauth_token = access_token,
+    oauth_token_secret = access_secret
+  )
+  httr::Token1.0$new(
+    app = app,
+    endpoint = httr::oauth_endpoints("twitter"),
+    params = list(as_header = TRUE), 
+    credentials = credentials, 
+    cache_path = FALSE
+  )
+}
+
+rtweet_app <- function(bearer_token) {
+  structure(
+    list(token = bearer_token),
+    class = "rtweet_bearer"
+  )
+}
+auth <- rtweet_bot()
+
+```
+
+
+
+
+```{r}
+tlCLRCSM <- get_timeline(c("CarloCalenda","EnricoLetta", "matteorenzi", "GiuseppeConteIT", "matteosalvinimi","GiorgiaMeloni" ), 2000, token=auth)
+head(tlCLRCSM)
+
+```
+
+### Temporal view
+Temporal band in which the 2000 tweets have been created:
+```{r}
+by(tlCLRCSM$created_at,tlCLRCSM$screen_name,summary)
+```
+ 
+CC posted 2000 tweets in just 3 months
+EL posted 2000 tweets in just 8 months
+MR posted 2000 tweets in almost 1 year and an half
+GC posted 2000 tweets in 3 years 
+MS posted 2000 tweets in just 4 months
+GM posted 2000 tweets in 1 year
+
+Restricting the timelines to study the those tweets published starting from 2020-01-01:
+```{r}
+tlCLRCSMr <- tlCLRCSM[as.Date(tlCLRCSM$created_at) >= "2020-01-01",] 
+table(tlCLRCSMr$screen_name)
+```
+
+To have also a temporal point of view of when the tweets have been published, from the tweets extracted from the timelines a graph as been plotted considering the weeks starting from 2020-01-01. What is remarkable is that M. Renzi is the first one of the three in publishing tweets, while G. Meloni started during the second part of the year 2020 and C. Calenda joined the other two users just during the past few months, but the number of tweets published by him is significantly higher than the ones of the other two users.
+```{r}
+tlCLRCSMr %>%
+  dplyr::group_by(screen_name) %>% 
+  ts_plot("weeks") + 
+  theme_light() + 
+  scale_color_manual(values=c("red", "green", "blue", "yellow", "gray", "pink")) + 
+  geom_line(size=0.8) + 
+  labs(title="Temporal distribution of the tweets") 
+```
+
+### Variables of interest
+To plot some graphs considering number of followers and tweet production of the three accounts, some vectors have been created, containing the selected users (vsUsr) and the most interesting variables:
+```{r}
+vsUsr <- c("CarloCalenda","EnricoLetta", "matteorenzi", "GiuseppeConteIT", "matteosalvinimi","GiorgiaMeloni") #Vector with Selected Users 
+sUsrs <- lookup_users(users = vsUsr, token=auth)
+sUsrs[,c("user_id","screen_name","location","account_created_at","followers_count",
+         "friends_count","statuses_count","favourites_count")]
+```
+
+Setting the margin limits and plotting a bar histogram that shows the number of followers, and another one for the number of tweets:
+
+```{r}
+par(mar=c(6,4,2,1))
+par(mgp=c(1.5,0.5,0))
+par(mfrow=c(1,2))
+
+barplot(sUsrs$followers_count, names.arg = sUsrs$screen_name, las=2, 
+        main="Number of Followers", 
+        ylim = c(0,3500000), cex.axis = 0.7, cex.names = 0.8, cex.main=0.9) +
+        grid(NA,NULL)
+vUsr <- c("msgelmini", "luigidimaio", "nzingaretti", "berlusconi", "sbonaccini", "BerniniAM","lauraboldrini")  
+Usrs <- lookup_users(users = vUsr, token = auth)
+Usrs[,c("user_id","screen_name","location","account_created_at","followers_count",
+        "friends_count","statuses_count","favourites_count")]
+
+par(mar=c(6,4,2,1))
+par(mgp=c(1.5,0.5,0))
+par(mfrow=c(1,2))
+#istogramma a barre per numero di followers
+barplot(Usrs$followers_count, names.arg = Usrs$screen_name, las=2, 
+        main="Number of Followers", 
+        ylim = c(0,3500000), cex.axis = 0.7, cex.names = 0.8, cex.main=0.9) +
+  grid(NA,NULL)
+
+barplot(sUsrs$statuses_count,names.arg = sUsrs$screen_name,las=2,
+        main="Number of Tweets",
+        cex.axis = 0.7,cex.names = 0.8, cex.main=0.9)+
+        grid(NA,NULL)
+```
+The user with the highest number of followers is Renzi with more than 3 milion followers, while Calenda can't reach half a milion (330.000) and Meloni slightly exceeds 1 milion followers.
+Whereas for what concerns the number of tweets, Calenda published the higher number of tweets (more than 25.000), Meloni exceed 15.000 and Renzi reaches almost 15.000.
+
+
+Using the library {ggplot2} we can show some further information about these profiles.
+The first plot shows on the x-axis the number of followers and on the y-axis the name of three users, while the color of the bars represents the friends count that is the number of users that the selected users are following. 
+```{r}
+
+
+ggplot(data=sUsrs, 
+      aes(x=screen_name, 
+          y=followers_count,
+          fill=friends_count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() +
+  theme_light() +
+  ggtitle("Profiles ordered by Number of Followers")
+
+ggplot(data=sUsrs, 
+       aes(x=screen_name, 
+           y=statuses_count)) +
+  geom_bar(stat="identity", fill="steelblue") + 
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1)) +
+  ggtitle("Profiles ordered by Number of Tweets") + 
+  xlab("")
+
+```
+
+### A look to the statistics of other users 
+##### Accounts of the 5 leaders of the main Italian parties
+To get a set of the actual context of politicians using Twitter, the same features of before have been plotted but regarding other Italians politicians (Matteo Salvini, Luigi di Maio, Giuseppe Conte, Nicola Zingaretti, Silvio Berlusconi):
+```{r}
+#Grafici con numero di follower, produzione di tweet per altri politici  
+vUsr <- c("msgelmini", "luigidimaio", "nzingaretti", "berlusconi", "sbonaccini", "BerniniAM","lauraboldrini")  
+Usrs <- lookup_users(users = vUsr, token = auth)
+Usrs[,c("user_id","screen_name","location","account_created_at","followers_count",
+        "friends_count","statuses_count","favourites_count")]
+
+par(mar=c(6,4,2,1))
+par(mgp=c(1.5,0.5,0))
+par(mfrow=c(1,2))
+#istogramma a barre per numero di followers
+barplot(Usrs$followers_count, names.arg = Usrs$screen_name, las=2, 
+        main="Number of Followers", 
+        ylim = c(0,3500000), cex.axis = 0.7, cex.names = 0.8, cex.main=0.9) +
+  grid(NA,NULL)
+
+#istogramma a barre per numero di tweet
+barplot(Usrs$statuses_count,names.arg = Usrs$screen_name,las=2,
+        main="Number of Tweets",
+        cex.axis = 0.7,cex.names = 0.8, cex.main=0.9)+
+  grid(NA,NULL)
+
+
+ggplot(data=Usrs, 
+       aes(x=screen_name, 
+           y=followers_count,
+           fill=friends_count)) +
+  geom_bar(stat="identity") + 
+  coord_flip() +
+  theme_light() +
+  ggtitle("Profiles ordered by Number of Followers")
+
+ggplot(data=Usrs, 
+       aes(x=screen_name, 
+           y=statuses_count)) +
+  geom_bar(stat="identity", fill="steelblue") + 
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1)) +
+  ggtitle("Profiles ordered by Number of Tweets") + 
+  xlab("")
+```
+
+### Main features 
+#### > Followers
+It is also networthy to see whether the three selected accounts have common followers or not. To do so 10.000 followers for each user (GM, CC, MR) have beeen selected; these lists can be joined together to verify how many users (user_id) follow either one, two or all three accounts. 
+"CarloCalenda","EnricoLetta", "matteorenzi", "GiuseppeConteIT", "matteosalvinimi","GiorgiaMeloni"
+```{r}
+fEL <- get_followers(user = sUsrs$user_id[2],n = 3000, token = auth)
+fCC <- get_followers(user = sUsrs$user_id[1],n = 3000, token = auth)
+fMR <- get_followers(user = sUsrs$user_id[3],n = 3000, token = auth)
+fEL$user <- "EL"
+fMR$user <- "MR"
+fCC$user <- "CC"
+# creo un data frame dall'abbinamento delle liste di Letta e Renzi
+fELMR <- merge(fEL, fMR, by = "user_id", all = T)
+# modifico i nomi delle ultime due colonne
+colnames(fELMR)[2:3] <- c("user.EL", "user.MR")
+# abbino il nuovo data frame con la lista dei follower di Calenda
+fELMRCC <- merge(fELMR, fCC, by = "user_id", all = T)
+colnames(fELMRCC)[4] <- "user.CC"
+# sostituisco gli NA con uno spazio
+fELMRCC[is.na(fELMRCC)] <- ""
+# creo un campo con l'accorpamento delle sigle
+fELMRCC$who <- paste(fELMRCC$user.EL,fELMRCC$user.MR,fELMRCC$user.CC,sep=" ")
+# elimino gli spazi inutili dal campo who
+fELMRCC$who <- gsub(" "," ",fELMRCC$who)
+fELMRCC$who <- gsub("ˆ\\s+|\\s+$", "", fELMRCC$who)
+cbind(n=addmargins(table(fELMRCC$who)),
+percent=addmargins(prop.table(table(fELMRCC$who)))*100)
+
+fGC <- get_followers(user = sUsrs$user_id[4],n = 3000, token = auth)
+fMS <- get_followers(user = sUsrs$user_id[5],n = 3000, token = auth)
+fGM <- get_followers(user = sUsrs$user_id[6],n = 3000, token = auth)
+fMS$user <- "MS"
+fGM$user <- "GM"
+fGC$user <- "GC"
+# creo un data frame dall'abbinamento delle liste di Salvini e Meloni
+fMSGM <- merge(fMS, fGM, by = "user_id", all = T)
+# modifico i nomi delle ultime due colonne
+colnames(fMSGM)[2:3] <- c("user.MS", "user.GM")
+# abbino il nuovo data frame con la lista dei follower di Conte
+fMSGMGC <- merge(fMSGM, fGC, by = "user_id", all = T)
+colnames(fMSGMGC)[4] <- "user.GC"
+# sostituisco gli NA con uno spazio
+fMSGMGC[is.na(fMSGMGC)] <- ""
+# creo un campo con l'accorpamento delle sigle
+fMSGMGC$who <- paste(fMSGMGC$user.MS,fMSGMGC$user.GM,fMSGMGC$user.GC,sep=" ")
+# elimino gli spazi inutili dal campo who
+fMSGMGC$who <- gsub(" "," ",fMSGMGC$who)
+fMSGMGC$who <- gsub("ˆ\\s+|\\s+$", "", fMSGMGC$who)
+cbind(n=addmargins(table(fMSGMGC$who)),
+percent=addmargins(prop.table(table(fMSGMGC$who)))*100)
+
+
+
+# creo un data frame dall'abbinamento delle liste di Letta e Renzi
+fELMR <- merge(fEL, fMR, by = "user_id", all = T)
+# modifico i nomi delle ultime due colonne
+colnames(fELMR)[2:3] <- c("user.EL", "user.MR")
+# abbino il nuovo data frame con la lista dei follower di Calenda
+fELMRCC <- merge(fELMR, fCC, by = "user_id", all = T)
+colnames(fELMRCC)[4] <- "user.CC"
+# abbino il nuovo data frame con la lista dei follower di Conte
+fELMRCCGC <- merge(fELMRCC, fGC, by = "user_id", all = T)
+colnames(fELMRCCGC)[5] <- "user.GC"
+# abbino il nuovo data frame con la lista dei follower di Salvini
+fELMRCCGCMS <- merge(fELMRCCGC, fMS, by = "user_id", all = T)
+colnames(fELMRCCGCMS)[6] <- "user.MS"
+# abbino il nuovo data frame con la lista dei follower di Meloni
+fELMRCCGCMSGM <- merge(fELMRCCGCMS, fGM, by = "user_id", all = T)
+colnames(fELMRCCGCMSGM)[7] <- "user.GM"
+# sostituisco gli NA con uno spazio
+fELMRCCGCMSGM[is.na(fELMRCCGCMSGM)] <- ""
+# creo un campo con l'accorpamento delle sigle
+fELMRCCGCMSGM$who <- paste(fELMRCCGCMSGM$user.EL,fELMRCCGCMSGM$user.MR,
+                           fELMRCCGCMSGM$user.CC,fELMRCCGCMSGM$user.GC,
+                           fELMRCCGCMSGM$user.MS,fELMRCCGCMSGM$user.GM, sep=" ")
+# elimino gli spazi inutili dal campo who
+fELMRCCGCMSGM$who <- gsub(" "," ",fELMRCCGCMSGM$who)
+fELMRCCGCMSGM$who <- gsub("ˆ\\s+|\\s+$", "", fELMRCCGCMSGM$who)
+cbind(n=addmargins(table(fELMRCCGCMSGM$who)),
+percent=addmargins(prop.table(table(fELMRCCGCMSGM$who)))*100)
+```
+From the table it can be seen that just Meloni and Calenda have some followers in common. Still it is important to remember that the 3000 followers are just a sample and it is small compared to the total number of followers for each account so it may be that extracting different times the samples, the result could change a little bit. 
+
+It is possible to plot these results using a chart pie:
+
+```{r}
+
+par(mfrow = c(3,1))
+
+
+
+
+#CALENDA
+tbCC <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.CC != "","who"])
+aCC<-tbCC[tbCC>100]
+bCC<-sum(tbCC[tbCC<100])
+pie(c(aCC,bCC),
+    clockwise = T,
+    labels = c(paste(names(aCC),round(aCC/sum(tbCC)*100),"%"),
+               paste("other combinations", round(bCC/sum(tbCC)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Calenda",
+    col = brewer.pal(6,"Pastel2"))
+
+#LETTA
+tbEL <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.EL != "","who"])
+aEL<-tbEL[tbEL>100]
+bEL<-sum(tbEL[tbEL<100])
+pie(c(aEL,bEL),
+    clockwise = T,
+    labels = c(paste(names(aEL),round(aEL/sum(tbEL)*100),"%"), 
+               paste("other combinations", round(bEL/sum(tbEL)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Letta",
+    col = brewer.pal(7,"Pastel1"))
+
+#RENZI
+tbMR <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.MR != "","who"])
+aMR<-tbMR[tbMR>100]
+bMR<-sum(tbMR[tbMR<100])
+pie(c(aMR,bMR),
+    clockwise = T,
+    labels = c(paste(names(aMR),round(aMR/sum(tbMR)*100),"%"), 
+               paste("other combinations", round(bMR/sum(tbMR)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Renzi",
+    col = brewer.pal(7,"Paired"))
+
+#CONTE
+tbGC <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.GC != "","who"])
+aGC<-tbGC[tbGC>100]
+bGC<-sum(tbGC[tbGC<100])
+pie(c(aGC,bGC),
+    clockwise = T,
+    labels = c(paste(names(aGC),round(aGC/sum(tbGC)*100),"%"), 
+               paste("other combinations", round(bGC/sum(tbGC)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Conte",
+    col = brewer.pal(7,"Accent"))
+
+#SALVINI
+tbMS <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.MS != "","who"])
+aMS<-tbMS[tbMS>100]
+bMS<-sum(tbMS[tbMS<100])
+pie(c(aMS,bMS),
+    clockwise = T,
+    labels = c(paste(names(aMS),round(aMS/sum(tbMS)*100),"%"), 
+               paste("other combinations", round(bMS/sum(tbMS)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Salvini",
+    col = brewer.pal(7,"Set2"))
+
+#MELONI
+tbGM <- table(fELMRCCGCMSGM[fELMRCCGCMSGM$user.GM != "","who"])
+aGM<-tbGM[tbGM>100]
+bGM<-sum(tbGM[tbGM<100])
+pie(c(aGM,bGM),
+    clockwise = T,
+    labels = c(paste(names(aGM),round(aGM/sum(tbGM)*100),"%"), 
+               paste("other combinations", round(bGM/sum(tbGM)*100),"%")), 
+    cex=0.9,
+    radius = 0.9, 
+    main="Meloni",
+    col = brewer.pal(6,"Set3"))
+```
+
+Now that some information regarding the followers of the users has been collected, it is possible to see also the content of the tweets published from the selected accounts. 
+Creating an object called "tl6" we save last 1000 tweets published for each of the three accounts, without taking into consideration retweets.
+
+```{r}
+tl6 <- get_timeline(user = sUsrs$user_id, n = 1000, include_rts = F,
+                    token = auth)
+table(tl6$screen_name)
+```
+
+#### > Retweets, Quotes and Hashtags for each account
+For each account 2000 tweets have been collected, then the temporal band of the creation of the tweets is shown as well as the number tweets that are retweets or quotes (False stands for non retweets, True means that tweet is a retweet, the same applies for quotes). The last two tables display the 10 most used hashtags of the account and the 10 most used mentions, this passage is done by transforming the content of the list containing the hashtags in a vector using the function unlist, then a frequency table for the hashtags is created and the result is ordered in decreasing order.
+Here follows the results for these procedures applied on the profile of Giorgia Meloni.
+```{r}
+#MELONI
+tlGM <- get_timeline("GiorgiaMeloni", 1000, token = auth) 
+summary(tlGM$created_at)
+table(tlGM$is_retweet)
+table(tlGM$is_quote)
+
+sort(table(unlist(tlGM$hashtags)),decreasing = T)[1:10]
+sort(table(unlist(tlGM$mentions_screen_name)),decreasing = T)[1:10]
+
+```
+
+The same operations are performed on the other two profiles, in the following lines the results for Calenda profile are shown.
+```{r}
+#CALENDA
+tlEL <- get_timeline("EnricoLetta", 1000,token = auth) 
+summary(tlEL$created_at) 
+table(tlEL$is_retweet)
+table(tlEL$is_quote)
+
+sort(table(unlist(tlEL$hashtags)),decreasing = T)[1:10]
+sort(table(unlist(tlEL$mentions_screen_name)),decreasing = T)[1:10]
+
+
+```
+
+For what concerns Matteo Renzi's account the following is the data collected:
+```{r}
+#RENZI
+tlMR <- get_timeline("matteorenzi", 1000, token = auth) 
+summary(tlMR$created_at) 
+table(tlMR$is_retweet)
+table(tlMR$is_quote)
+
+sort(table(unlist(tlMR$hashtags)),decreasing = T)[1:10]
+sort(table(unlist(tlMR$mentions_screen_name)),decreasing = T)[1:10]
+```
+
+To better visualize the differences for the three accounts, the past results obtained individually for each user can be combined together as follows:
+```{r}
+print(c("RETWEETS",table(c(tlMR$screen_name, tlMR$is_retweet)),
+        table(c(tlGM$screen_name, tlGM$is_retweet )),
+        table(c(tlCC$screen_name, tlCC$is_retweet ))))
+
+print(c("QUOTES", table(c(tlMR$is_quote, tlMR$screen_name)),
+        table(c(tlGM$is_quote, tlGM$screen_name)),
+        table(c(tlCC$is_quote, tlCC$screen_name))))
+
+print(c("HASHTAGS", sort(table(unlist(tlMR$hashtags)),decreasing = T)[1:5],
+        sort(table(unlist(tlGM$hashtags)),decreasing = T)[1:5],
+      sort(table(unlist(tlCC$hashtags)),decreasing = T)[1:5]))
+ 
+print(c("MENTIONS",sort(table(unlist(tlMR$mentions_screen_name)),decreasing = T)[1:5],
+        sort(table(unlist(tlGM$mentions_screen_name)),decreasing = T)[1:5],
+        sort(table(unlist(tlCC$mentions_screen_name)),decreasing = T)[1:5]))
+```
+
+#### > Hashtags
+An other interesting thing to see is the possibility of having some common hashtags between the two users, here it can be seen that the three accounts have few common hashtags.
+```{r}
+vsUsr 
+lstHS <- list() 
+nHS <- numeric() 
+uHS <- numeric() 
+for(i in 1:6){
+  tmp <- tlCLRCSMr[tlCLRCSMr$screen_name==vsUsr[i],"hashtags"] 
+  tmp <- unlist(tmp,use.names = F) 
+  tmp <- na.omit(tmp) 
+  nHS[i] <- length(tmp) 
+  uHS[i] <- length(unique(tmp)) 
+  lstHS[[i]] <- tmp
+}
+names(lstHS) <- vsUsr
+names(nHS) <- vsUsr
+names(uHS) <- vsUsr
+cbind(Hashtag.Tot=nHS,Hashtag.Univoci=uHS)
+
+library(purrr)
+Reduce(intersect,list(lstHS[[1]],lstHS[[2]],lstHS[[3]],lstHS[[4]],lstHS[[5]],lstHS[[6]] )) 
+```
+
+It is also possible to exclude one of the three accounts to see whether considering just two of them they have more common hashtags.
+The first result stands for the hashtags used by both G. Meloni and M. Renzi;
+The second one is the one obtained excluding M. Renzi, thus just G. Meloni and C. Calenda;
+The last one is the number of hashtags used by C. Calenda and M. Renzi.
+We can see that there is a noticeable difference between the number of common hashtags between G. Meloni and M. Renzi with respect to the two combinations in which C. Calenda is present, indeed it is more than twice of the numbers obtained from the other combinations.
+```{r}
+Reduce(intersect,list(lstHS[[6]],lstHS[[3]], lstHS[[5]]))  #cx sx
+
+Reduce(intersect,list(lstHS[[5]],lstHS[[2]], lstHS[[6]])) #dx
+
+Reduce(intersect,list(lstHS[[2]],lstHS[[3]], lstHS[[6]])) 
+
+Reduce(intersect,list(lstHS[[2]],lstHS[[6]], lstHS[[5]]))
+
+Reduce(intersect,list(lstHS[[6]],lstHS[[5]], lstHS[[4]]))
+
+
+```
+
+#### > Favorites
+An important feature that can be observed from the three profiles is the number of favorites given by the users to the tweets of the selected accounts. Using the object created previously in which are collected 2000 tweets for each account starting from 2020-01-01.
+In the following table it can be seen how many times those tweets have been indicated as favorites by other users.
+```{r}
+library(dplyr)
+tbFav <- tlCLRCSMr %>%
+  group_by(screen_name) %>% 
+  summarise(n=n(),min=min(favorite_count),max=max(favorite_count),
+            totFavoriti=sum(favorite_count),
+            media=mean(favorite_count))
+tbFav
+```
+The following plot shows the distribution of the number of favorites for each account. The account reaching a higher number is the one of G. Meloni, whereas the other two profiles have a similar distribution.
+
+```{r}
+ggplot(tlCLRCSMr, aes(x=screen_name, y=favorite_count,fill = screen_name)) +
+  stat_boxplot(geom = "errorbar", width = 0.2) +
+  geom_boxplot() + 
+  theme_bw()+xlab("") + ggtitle("Distribution of favorites per user") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(legend.position = "none")
+
+
+```
+
+Indeed, it is possible to plot the average number of favorites per account that shows a behavior similar to the one of the distribution.
+```{r}
+par(mfrow=c(1,2))
+ggplot(tbFav, aes(x=reorder(screen_name,-media), y=media, 
+                  fill=screen_name))+
+  geom_bar(stat="identity")+
+  theme_minimal()+xlab("")+ylab("Favorites per tweet")+
+  ggtitle("Average number of favorites") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_fill_brewer(palette = "Dark2") + theme(legend.position = "none")
+ggplot(tbFav, aes(x=reorder(screen_name,-totFavoriti), y=totFavoriti, fill = screen_name))+
+  geom_bar(stat="identity")+
+  theme_minimal()+xlab("")+ylab("Favorites count")+
+  ggtitle("Total number of favorites") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_brewer(palette = "Dark2") + theme(legend.position = "none")
+```
+
+The graph representing the total number of tweets has the same features of the previous plots shown before, confirming that G. Meloni has a high number of favorites for many tweets, and the other two profile have a number of favorites that does not differ significantly. It is also remarkable that C. Calenda has a number of followers extremely small with respect to M. Renzi (3K wrt 3M).
+```{r}
+ggplot(tbFav, aes(x=reorder(screen_name,-totFavoriti), y=totFavoriti, fill = screen_name))+
+  geom_bar(stat="identity")+
+  theme_minimal()+xlab("")+ylab("Favorites count")+
+  ggtitle("Total number of favorites") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_brewer(palette = "Dark2") + theme(legend.position = "none")
+```
+
+#### > Retweets 
+Retweets are a considerable indicator to understand the differences between different Twitter's profiles. In this case it can be seen how many times the tweets of the three selected accounts have been retweeted by other users.
+As it can be seen from the following table, the number of times Calenda's tweets have been retweeted is very low with respect to the other two politicians.
+
+```{r}
+tbRT <- tlCLRCSMr[tlCLRCSMr$is_retweet==F,] %>% 
+group_by(screen_name) %>% 
+summarise(n=n(),min=min(retweet_count),max=max(retweet_count),
+            totFavoriti=sum(retweet_count),
+            media=mean(retweet_count))
+tbRT
+```
+
+In this plot it can be seen the total number of retweets for each account.
+```{r}
+ggplot(tbRT, aes(x=reorder(screen_name, -totFavoriti), y=totFavoriti, 
+                 fill=screen_name)) +
+  geom_bar(stat="identity")+
+  theme_minimal()+xlab("")+ylab("Number of Retweets")+
+  ggtitle("Total number of Retweets") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_fill_brewer(palette = "Dark2") + theme(legend.position = "none")
+```
+For what concerns the average number of retweets the shape of the graph changes with respect to the one representing the total number of retweets. Indeed, the average number is similar for G. Meloni and M. Renzi meaning that M. Renzi seems to receive a constant number of tweets with respect to M. Meloni's tweets.
+```{r}
+ggplot(tbRT, aes(x=reorder(screen_name, -media), y=media, 
+                 fill=screen_name)) +
+  geom_bar(stat="identity")+
+  theme_minimal()+xlab("")+ylab("Average number of Retweets")+
+  ggtitle("Average number of Retweets") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_fill_brewer(palette = "Dark2") + theme(legend.position = "none")
+```
+
+#### > Favorites & Retweets
+Putting together favorites and retweets received by the three accounts we can build an interesting plot that shows how these two indicators have been changing during past few months. Indeed, M. Renzi has reached higher numbers but paying attention to the right part of the graph it can be seen that C. Calenda was not so active in publishing as the other two users until 2021-06.
+```{r}
+tab2 <- tlCLRCSMr[,c("screen_name","created_at","favorite_count","retweet_count")] %>% 
+  group_by(screen_name,giorno=as.Date(created_at)) %>% 
+  summarise(favoriti=sum(favorite_count),retweet=sum(retweet_count),n=n())
+
+tab2$favret <- tab2$favoriti+tab2$retweet
+
+ggplot(tab2, aes(x=giorno, y=favret, group=screen_name)) +
+  geom_line(aes(color=screen_name),size= 1)+
+  scale_color_manual(values=brewer.pal(9, "Set1")[c(1:5,9)])+
+  theme_light()+ggtitle("Favorites & ReTweets per day") + xlab("") +
+  ylab("Favorites & ReTweets")
+
+```
+Here a different way to visualize the same result of before.
+```{r}
+p1 <- ggplot(tab2, aes(x=giorno, y=favret/n)) +
+  geom_line(aes(color=screen_name),size= 1)+
+  ylim(0,7000) +
+  scale_color_manual(values=brewer.pal(9, "Set1")[c(1:5,9)])+
+  theme_light() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+p1
+```
+To have a cleaner view for the three profiles we can show them individually as follows.
+```{r}
+p1 + facet_wrap( ~ screen_name, nrow = 3) + 
+  theme(legend.position = "none") +
+  ggtitle("Favorites & Retweets for each tweet of the users") +
+  xlab("") + ylab("Favorites & Retweets per tweet") 
+```
+
+#### > Type of tweet
+From the 2000 tweets collected from the three timelines of the accounts we can also divide the tweets to see how many of them are retweets, both from an absolute point of view and from a relative point of view(%).
+```{r}
+addmargins(table(tlCLRCSMr$screen_name,tlCLRCSMr$is_retweet))
+
+round(addmargins(prop.table(addmargins(table(tlCLRCSMr$screen_name,tlCLRCSMr$is_retweet),1),1),2)*100,1)
+
+```
+Plotting these results it can be seen that G. Meloni is the account that publishes more original tweets while M. Renzi is the one publishing more retweets (almost reaching 50%)
+```{r}
+tb <- as.data.frame(table(tlCLRCSMr$is_retweet,tlCLRCSMr$screen_name))
+ggplot(tb,aes(x=Var2,y=Freq, fill=Var1))+
+  geom_bar(position = "fill", stat = "identity") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_minimal() + xlab("")+ylab("")+
+  ggtitle("Distribution of Retweets") +
+  labs(fill = "is_retweet")
+
+```
+
+
+
+
+PARTE NUOVA
+Il testo dei tweet deve essere ripulito da alcuni elementi: 
+~ caratteri di controllo (ad esempio gli a capo \n), 
+~ link a pagine web, 
+~ punteggiatura, 
+~ riferimenti agli utenti a cui si risponde
+~ spazi inutili
+ed eventualmente 
+~ hashtag #
+~ mention @
+~ numeri
+
+```{r}
+
+#tlCLRCSMr$text[1:10]
+
+tweet <- tlCLRCSMr$text
+```
+
+
+```{r}
+# rimuove i link
+tweet <- gsub("(fht)(tp)(s?)(://)(.*)[.|/](.*)", " ", tweet)
+# i riferimenti nei retweet
+tweet <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", tweet)
+tweet <- gsub("(rt|via)((?:\\b\\W*@\\w+)+)", " ", tweet)
+# punteggiatura esclusi # e @
+tweet = gsub("([#@])|[[:punct:]]", " \\1", tweet)
+# hashtag
+tweet = gsub("#\\w+", " ", tweet)
+# mention
+tweet = gsub("@\\w+", " ", tweet)
+# caratteri di controllo
+tweet = gsub('[[:cntrl:]]', ' ', tweet)
+# quelli che non sono caratteri grafici 
+#(quello che non è [[:alnum:][:punct:]])
+tweet = gsub('[^[:graph:]]', ' ', tweet)
+# tabulazioni e più spazi in mezzo al testo
+tweet = gsub("[ \t]{2,}", " ", tweet)
+tweet = gsub("\\s+"," ",tweet)
+# spazi all'inizio e alla fine
+tweet = gsub("^\\s+|\\s+$", "", tweet)
+# numeri
+tweet = gsub("[[:digit:]]", " ", tweet)
+# trasforma tutto in minuscolo
+tweet = tolower(tweet)
+head(tweet)
+```
+
+It is also possible to create a function that automatically cleans the text, in order not to run all the commands each time.
+el caso specifico la funzione si attende come
+input un vettore di testi xtxt (nel nostro caso
+il vettore con i testi dei tweet); sono inoltre
+previste delle variabili logiche (hashtag,
+mention, numeri
+e minuscolo) che
+verranno utilizzate all’interno della funzione
+per effettuare o meno alcune operazioni.
+L’oggetto xtxt è impostato come NULL, deve
+quindi essere necessariamente indicato, per le
+variabili logiche è invece impostato un valore di
+default.
+Come prima operazione debbo verificare se è
+stato fornito come input il vettore di testi e se è
+di tipo carattere (in caso contrario la funzione
+darebbe errore);
+procedo poi nelle operazioni di pulizia del
+testo;
+utilizzando i valori assegnati alle variabili
+logiche effettuo o meno le operazioni di pulizia
+degli hashtag, delle mention e dei numeri.
+return() indica quale oggetto creato
+all’interno della funzione deve essere restituito,
+nel nostro caso il vettore di testi ripulito xtxt.
+```{r}
+cleanTweet <- function(xtxt = NULL, 
+hashtag = TRUE, mention = TRUE, 
+numeri = TRUE, minuscolo = TRUE){
+# descrizione parametri della funzione:
+# xtxt = vettore di testi (tweet)
+# hashtag = logico, se TRUE rimuove per intero gli hashtag
+# mention = logico, se TRUE rimuove per intero le mention @
+# numeri = logico, se TRUE rimuove tutti i numeri dai messaggi
+# minuscolo = logico, se TRUE trasforma in minuscolo tutti i testi
+# controllo se x è definito ed è un oggetto di tipo carattere
+if(is.null(xtxt) | class(xtxt) != "character"){
+message("text vector not valid")
+return()
+}
+# rimuove i link
+xtxt = gsub("(f|ht)(tp)(s?)(://)(.\\S+)[.|/](.\\S+)", " ", xtxt)
+# rimuove i riferimenti nei retweet
+xtxt = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", xtxt)
+xtxt = gsub("(rt|via)((?:\\b\\W*@\\w+)+)", " ", xtxt)
+# rimuove la punteggiatura
+xtxt = gsub("([#@])|[[:punct:]]", " \\1", xtxt)
+# rimuove i caratteri di controllo
+xtxt = gsub('[[:cntrl:]]', ' ', xtxt)
+# quelli che non sono caratteri grafici (quello che non è [[:alnum:][:punct:]])
+xtxt = gsub('[^[:graph:]]', ' ', xtxt)
+# se hashtag = TRUE li rimuove
+if(hashtag == TRUE) xtxt = gsub("#\\S+", " ", xtxt)
+# se mention = TRUE le rimuove
+if(mention == TRUE) xtxt = gsub("@\\S+", " ", xtxt)
+# se numeri = TRUE li rimuove
+if(numeri == TRUE) xtxt = gsub("[[:digit:]]", "", xtxt)
+# rimuove tabulazioni e più spazi in mezzo al testo o all'inizio o alla fine
+xtxt = gsub("[ \t]{2,}", " ", xtxt)
+xtxt = gsub(' +',' ',xtxt)
+xtxt = gsub("^\\s+|\\s+$", "", xtxt)
+# se minuscolo = TRUE trasforma tutto in minuscolo
+if(minuscolo == TRUE) xtxt = tolower(xtxt)
+return(xtxt)
+}
+head(cleanTweet(tlCLRCSMr$text))
+```
+
+Nella fase di codifica è opportuno identificare forme grafiche composte e complesse e trasformale in "parole" con un
+contenuto semantico superiore rispetto alle forme semplici che le compongono.
+Si debbono quindi individuare quei segmenti di 2, 3, 4 parole che rappresentano poliforme o polirematiche;
+per fare ciò si possono utilizzare:
+ Dizionari specifici che contengono tali forme (metodologia utilizzata da alcuni software)
+ N-grammi: sottosequenze di n elementi di una data sequenza
+
+la libreria ngram che permette di suddividere i testi in sotto-sequenze di lunghezza prefissata:
+
+```{r}
+
+
+testo <- tweet
+# elimino gli spazi eccessivi
+testo = gsub(' +',' ',testo)
+testo = gsub("^\\s+|\\s+$", "", testo)
+# conteggio del numero di parole presenti per tweet
+# dichiarazione del vettore numerico in cui
+# registrare il numero di parole di ciascun tweet
+vnWrd <- numeric()
+for(i in 1:length(testo)){
+vnWrd[i] <- wordcount(testo[i])
+}
+# n-gram con n=3 sequenze di 3 parole più frequenti
+ng <- ngram(testo[vnWrd>2], n=3)
+ngt <- get.phrasetable(ng)
+ngt[ngt$freq>25,]
+```
+Estrazione del 3-grammi, selezionando i soli testi che hanno almeno 3 parole;
+Tabella dei 3-gramm con frequenza maggiore (la scelta della soglia dipende dalla dimensione del corpus e dal livello di precisione che si vuole avere nell’identificazione delle forme complesse).
+In questo caso abbiamo:
+‘posti di lavoro’ e ’forze dell ordine‘ che
+rappresentano sicuramente delle unità minimali di senso
+altre forme come ‘presidente del consiglio’ o ‘fratelli d italia‘ per cui la scelta di trasformarle in "parole" è più
+soggettiva e legata al contesto, ma in questo caso sicuramente corretta.
+
+Ricodifica delle forme complesse
+```{r}
+testo <- gsub("posti di lavoro","postilavoro",testo)
+
+testo <- gsub("reddito di cittadinanza","redditodicittadinanza",testo)
+testo <- gsub("all assemblea capitolina","all assembleacapitolina",testo)
+testo <- gsub("la raccolta firme ","la raccoltafirme",testo)
+testo <- gsub("il candidato sindaco","il candidatosindaco",testo)
+testo <- gsub("da palazzo chigi","da palazzochigi",testo)
+testo <- gsub("segretario del pd","segretariopd",testo)
+testo <- gsub("consiglio dei ministri","consiglioministri",testo)
+testo <- gsub("ministro dell interno","ministrointerno",testo)
+
+testo <- gsub("forze dell ordine","forzeordine",testo)
+testo <- gsub("presidente del consiglio", "presidenteconsiglio",testo)
+testo <- gsub("fratelli d italia","fratelliditalia",testo)
+```
+
+
+n-gram con n=2 sequenze di 2 parole più frequenti
+```{r}
+ng <- ngram(testo[vnWrd>1], n=2)
+ngt <- get.phrasetable(ng)
+ngt[ngt$freq>20,]
+```
+
+
+```{r}
+testo <- gsub("di maio", "dimaio",testo)
+testo <- gsub("conferenza stampa", "conferenzastampa",testo)
+testo <- gsub("candidato sindaco", "candidatosindaco", testo)
+testo <- gsub("italia viva", "italiaviva",testo)
+testo <- gsub("enrico letta", "enricoletta",testo)
+testo <- gsub("forze politiche", "forzepolitiche",testo)
+testo <- gsub("palazzo chigi", "palazzochigi",testo)
+testo <- gsub("campagna elettorale", "campagnaelettorale",testo)
+testo <- gsub("governo draghi", "governodraghi",testo)
+testo <- gsub("presidente draghi", "presidentedraghi",testo)
+testo <- gsub("governo conte", "governoconte",testo)
+testo <- gsub("classe dirigente", "classedirigente",testo)
+testo <- gsub("candidato presidente", "candidatopresidente",testo)
+testo <- gsub("immigrazione clandestina", "immigrazioneclandestina",testo)
+testo <- gsub("green pass","greenpass",testo)
+testo <- gsub("no vax","novax",testo)
+testo <- gsub("recovery plan","recoveryplan",testo)
+testo <- gsub("lista civica", "listacivica",testo)
+testo <- gsub("governo italiano","governoitaliano",testo)
+testo <- gsub("pagina facebook", "paginafacebook",testo)
+testo <- gsub("diretta facebook", "direttafacebook",testo)
+testo <- gsub("ministro lamorgese", "ministrolamorgese",testo)
+testo <- gsub("mario draghi","mariodraghi",testo)
+testo <- gsub("consiglio europeo", "consiglioeuropeo",testo)
+testo <- gsub("candidata presidente", "candidatapresidente",testo)
+```
+
+
+
+```{r}
+
+# creazione del corpus
+crp <- VCorpus(VectorSource(testo))
+head(crp)
+# rimozione delle stopwords italiane
+crp <- tm_map(x = crp,FUN = removeWords, stopwords("italian"))
+#Far from and the his you que sur
+mystopw <- c("far","from","and", "the", "his", "you", "que", "sur")
+crp <- tm_map(crp, removeWords, mystopw)
+# vettorizzazione
+# creazione della matrice Termini-Documenti
+tdm <- TermDocumentMatrix(crp)
+inspect(tdm[1:10, 1:20])
+```
+
+
+ operazioni su una TermDocumentMatrix
+ Consente di visualizzare i termini che hanno una
+frequenza superiore ad una determinata soglia
+```{r}
+findFreqTerms(tdm, 250)
+```
+
+
+Visualizza i termini che presentano un livello di correlazione superiore al limite fissato con il termine desiderato
+```{r}
+findAssocs(tdm, "calenda", corlimit = 0.22)
+findAssocs(tdm, "letta", corlimit = 0.11)
+findAssocs(tdm, "renzi", corlimit = 0.15)
+findAssocs(tdm, "conte", corlimit = 0.12)
+findAssocs(tdm, "salvini", corlimit = 0.15)
+findAssocs(tdm, "meloni", corlimit = 0.15)
+```
+
+Costruisco un vettore ordinato in senso decrescente del numero di volte in cui è presente ciascuna parola
+Creo un data frame in cui il primo campo (in questo caso denominato word) è costituito dalle parole e la seconda colonna (denominata freq) con le relativefrequenze
+
+```{r}
+library(slam)
+
+m = as.simple_triplet_matrix(tdm)
+# trasformo tdm in una matrice
+
+m[1:10,1:20]
+# ordino le parole in ordine decrescente
+word_freqs = sort(row_sums(tdm), decreasing=TRUE)
+# creo il data.frame
+dm = data.frame(Word=names(word_freqs), Freq=word_freqs, 
+stringsAsFactors = F)
+head(dm,10)
+```
+
+
+
+```{r}
+V <- nrow(dm)
+N <- sum(dm$Freq)
+# Estensione Lessicale Type Token Ratio
+TTR <- nrow(dm)/sum(dm$Freq)
+TTR
+
+hapax <- nrow(dm[dm$Freq==1,])
+# Ricercatezza nel linguaggio 
+hapax/V
+
+```
+
+ visualizzazione della nuvola di parole
+```{r}
+
+par(mar=c(0,0,0,0))
+window(wordcloud(words = dm$Word, # vettore delle parole
+freq = dm$Freq, # vettore con le frequenze delle parole
+scale = c(3,0.5), # range di dimensioni delle parole 
+min.freq = 30, # frequenza minima delle parole da visualizzare
+# in alternativa max.words = n numero massimo di parole
+random.order = FALSE, # se FALSE le parole più importanti sono al centro
+colors = brewer.pal(8, "Paired"))) # vettore di colori da utilizzare
+
+```
+
+
+
+```{r}
+library(koRpus)
+mtdm <- dm
+dim(mtdm)
+
+mtdm[1:10,1:5]
+load("./functions/formelemmi.RData")
+vLem <- character()
+vCGr <- character()
+{pb <- txtProgressBar(min = 0,max = nrow(mtdm),style=3)
+for(i in 1:nrow(mtdm)){
+setTxtProgressBar(pb,i)
+prl <- rownames(mtdm)[i]
+ll <- formelemmi[formelemmi$forma == prl, c("lemma", "CatGrL")]
+if(nrow(ll)>0){
+vLem[i] <- ll[1, "lemma"]
+vCGr[i] <- ll[1, "CatGrL"]
+} else {
+vLem[i] <- prl
+vCGr[i] <- "unknown"
+}
+}
+close(pb)}
+dftmp <- data.frame(forma = rownames(mtdm), lemma = vLem, 
+CatGr = vCGr, mtdm, Tot = rowSums(mtdm), 
+stringsAsFactors = F)
+dim(dftmp)
+```
+
+Domanda: esistono differenze nei contenuti dei tweet postati dai due utenti?
+Per verificare se ci sono differenze nel lessico si possono confrontare le distribuzioni di parole tra i due utenti
+
+
+```{r}
+# costruzione del corpus con i testi 
+crp <- VCorpus(VectorSource(testo))
+# costruzione di una Document-Term-Matrix
+ndtm <- DocumentTermMatrix(crp)
+# trasformazione della Document-Term-Matrix in data.frame
+ndtm <- data.frame(as.simple_triplet_matrix(ndtm), stringsAsFactors = F)
+# assegnazione dell'autore ai documenti
+ndtm <- data.frame(nome=twr3$screen_name,ndtm)
+head(ndtm[,1:5],4)
+
+# raggruppo i termini rispetto agli autori 
+# sommando le frequenze
+ndtm2 <- ndtm %>%
+group_by(nome) %>%
+summarise_all(sum)
+ndtm2[,c("nome","lega","economia")]
+# A tibble: 2 x 3
+
+# traspozione del data.frame
+ndtm3 <- t(ndtm2[,-1])
+# assegnazione dei nomi alle colonne del nuovo data.frame
+colnames(ndtm3) <- c("matteorenzi","matteosalvinimi")
+# data.frame con i lemmi (colonna word) e le frequenze per utente
+ndtm3 <- data.frame(word=rownames(ndtm3),ndtm3)
+rownames(ndtm3) <- NULL
+ndtm3[ndtm3$word=="lega" | ndtm3$word=="economia",]
+
+# dimensione del corpus per utente
+colSums(ndtm3[,2:3])
+```
+
+
+
+```{r}
+tlsmall <- get_timeline(c("GiorgiaMeloni", "CarloCalenda", "matteorenzi"), 500, token=auth)
+tweets <- tlsmall$text
+# rimuove i link
+tweets <- gsub("(f|ht)(tp)(s?)(://)(.*)[.|/](.*)", " ", tweets)
+# i riferimenti nei retweet
+tweets <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", tweets)
+tweets <- gsub("(rt|via)((?:\\b\\W*@\\w+)+)", " ", tweets)
+# punteggiatura esclusi # e @
+tweets = gsub("([#@])|[[:punct:]]", " \\1", tweets)
+# hashtag
+tweets = gsub("#\\w+", " ", tweets)
+# mention
+tweets = gsub("@\\w+", " ", tweets)
+# caratteri di controllo
+tweets = gsub('[[:cntrl:]]', ' ', tweets)
+# quelli che non sono caratteri grafici 
+#(quello che non è [[:alnum:][:punct:]])
+tweets = gsub('[^[:graph:]]', ' ', tweets)
+# tabulazioni e più spazi in mezzo al testo
+tweets = gsub("[ \t]{2,}", " ", tweets)
+tweets = gsub("\\s+"," ",tweets)
+# spazi all'inizio e alla fine
+tweets = gsub("^\\s+|\\s+$", "", tweets)
+# numeri
+tweets = gsub("[[:digit:]]", " ", tweets)
+# trasforma tutto in minuscolo
+tweets = tolower(tweets)
+head(tweets)
+
+testos <- tweets
+# elimino gli spazi eccessivi
+testos = gsub(' +',' ',testos)
+testos = gsub("^\\s+|\\s+$", "", testos)
+# conteggio del numero di parole presenti per tweet
+# dichiarazione del vettore numerico in cui
+# registrare il numero di parole di ciascun tweet
+vnWrds <- numeric()
+for(i in 1:length(testos)){
+vnWrds[i] <- wordcount(testos[i])
+}
+# n-gram con n=3 sequenze di 3 parole più frequenti
+ngs <- ngram(testos[vnWrds>2], n=3)
+ngts <- get.phrasetable(ngs)
+ngts[ngts$freq>10,]
+
+testos <- gsub("posti di lavoro","postilavoro",testos)
+testos <- gsub("medaglia d oro","medagliaoro",testos)
+testos <- gsub("reddito di cittadinanza","redditodicittadinanza",testos)
+testos <- gsub("all assemblea capitolina","all assembleacapitolina",testos)
+testos <- gsub("la raccolta firme ","la raccoltafirme",testos)
+testos <- gsub("il candidato sindaco","il candidatosindaco",testos)
+testos <- gsub("da palazzo chigi","da palazzochigi",testos)
+testos <- gsub("segretario del pd","segretariopd",testos)
+testos <- gsub("consiglio dei ministri","consiglioministri",testos)
+testos <- gsub("ministro dell interno","ministrointerno",testos)
+testos <- gsub("forze dell ordine","forzeordine",testos)
+testos <- gsub("presidente del consiglio", "presidenteconsiglio",testos)
+testos <- gsub("fratelli d italia","fratelliditalia",testos)
+
+testos <- gsub("di maio", "dimaio",testos)
+testos <- gsub("conferenza stampa", "conferenzastampa",testos)
+testos <- gsub("candidato sindaco", "candidatosindaco", testos)
+testos <- gsub("italia viva", "italiaviva",testos)
+testos <- gsub("enrico letta", "enricoletta",testos)
+testos <- gsub("forze politiche", "forzepolitiche",testos)
+testos <- gsub("palazzo chigi", "palazzochigi",testos)
+testos <- gsub("campagna elettorale", "campagnaelettorale",testos)
+testos <- gsub("governo draghi", "governodraghi",testos)
+testos <- gsub("presidente draghi", "presidentedraghi",testos)
+testos <- gsub("governo conte", "governoconte",testos)
+testos <- gsub("classe dirigente", "classedirigente",testos)
+testos <- gsub("candidato presidente", "candidatopresidente",testos)
+testos <- gsub("immigrazione clandestina", "immigrazioneclandestina",testos)
+testos <- gsub("green pass","greenpass",testos)
+testos <- gsub("no vax","novax",testos)
+testos <- gsub("recovery plan","recoveryplan",testos)
+testos <- gsub("lista civica", "listacivica",testos)
+testos <- gsub("governo italiano","governoitaliano",testos)
+testos <- gsub("pagina facebook", "paginafacebook",testos)
+testos <- gsub("diretta facebook", "direttafacebook",testos)
+testos <- gsub("ministro lamorgese", "ministrolamorgese",testos)
+testos <- gsub("mario draghi","mariodraghi",testos)
+testos <- gsub("consiglio europeo", "consiglioeuropeo",testos)
+testos <- gsub("candidata presidente", "candidatapresidente",testos)
+
+# creazione del corpus
+crps <- Corpus(VectorSource(testos))
+head(crps)
+# rimozione delle stopwords italiane
+crps <- tm_map(x = crps,FUN = removeWords, stopwords("italian"))
+#Far from and the his you que sur
+mystopw <- c("far","from","and", "the", "his", "you", "que", "sur")
+crps <- tm_map(crps, removeWords, mystopw)
+# vettorizzazione
+# creazione della matrice Termini-Documenti
+tdms <- TermDocumentMatrix(crps)
+inspect(tdms[1:10, 1:20])
+
+ms = as.matrix(tdms)
+# trasformo tdm in una matrice
+ms[1:10,1:20]
+# ordino le parole in ordine decrescente
+word_freqs = sort(row_sums(tdms), decreasing=TRUE)
+# creo il data.frame
+dms = data.frame(Word=names(word_freqs), Freq=word_freqs, 
+stringsAsFactors = F)
+head(dms,10)
+
+Vs <- nrow(dms)
+Ns <- sum(dms$Freq)
+
+library(koRpus)
+mtdms <- dms
+dim(mtdms)
+
+ndtms <- DocumentTermMatrix(crps)
+# trasformazione della Document-Term-Matrix in data.frame
+ndtms <- as.data.frame(as.matrix(ndtms))
+# assegnazione dell'autore ai documenti
+ndtms <- data.frame(nome=tdms$screen_name,ndtms)
+head(ndtm[,1:5],4)
+# raggruppo i termini rispetto agli autori 
+# sommando le frequenze
+ndtm2 <- ndtm %>%
+group_by(nome) %>%
+summarise_all(sum)
+ndtm2[,c("nome","lega","economia")]
+# traspozione del data.frame
+ndtm3 <- t(ndtm2[,-1])
+# assegnazione dei nomi alle colonne del nuovo data.frame
+colnames(ndtm3) <- c("matteorenzi","matteosalvinimi")
+# data.frame con i lemmi (colonna word) e le frequenze per utente
+ndtm3 <- data.frame(word=rownames(ndtm3),ndtm3)
+rownames(ndtm3) <- NULL
+ndtm3[ndtm3$word=="lega" | ndtm3$word=="economia",]
+# dimensione del corpus per utente
+colSums(ndtm3[,2:3])
+```
+
+
+
+```{r}
+
+```
+
