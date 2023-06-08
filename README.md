@@ -1,7 +1,8 @@
 # TWITTER-text-mining
 Text Mining on Twitter data: an analysis about Italian politicians' behaviours in 2021
 
- Abstract
+## Abstract
+
 The aim of this work is to compare the way Italian politicians use their Twitter
 accounts, with a particular focus on the kind of the tweet and on the political wing
 that a particular user represents. Indeed, since it is a wide-ranging topic, this work
@@ -14,7 +15,8 @@ of useful information cannot be carried out solely by human mind but requires te
 mining.
 
 
- Limitations
+## Limitations
+
 Text mining is a useful process but, of course, has many limitations, as a matter of fact, it does not
 reveal an absolute truth contained within the text. Namely, as an average reduces information for
 consumption of a large set of numbers, text mining reduces information too.
@@ -35,7 +37,8 @@ to hit a moving target as language evolve, it is considered as one of the areas 
 as difficult as challenging.
 
 
- Conclusions
+## Conclusions
+
 Given a data bank composed by a collection of tweets, regarding a sample of the more active Italian
 politicians on Twitter, an introductory analysis concerning several features of these accounts has
 been performed in order to get an overview as detailed and complete as possible. The objects under
